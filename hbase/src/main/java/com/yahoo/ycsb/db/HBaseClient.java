@@ -57,52 +57,56 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
  */
 public class HBaseClient extends com.yahoo.ycsb.DB
 {
-    private final Configuration config;
-    private final HConnection connection;
-    private final ThreadPoolExecutor executor;
-
-    public boolean debug = false;
-    public String columnFamily = "";
-    public byte columnFamilyBytes[];
-
     public static final int Ok=0;
     public static final int ServerError=-1;
     public static final int HttpError=-2;
     public static final int NoMatchingRecord=-3;
 
-    public HBaseClient() throws IOException {
-      super();
-      config = HBaseConfiguration.create();
-      // Disable Nagle on the client, hope we've done the same on the server
-      config.setBoolean("hbase.ipc.client.tcpnodelay", true);
-      connection = HConnectionManager.createConnection(config);
-      int coreThreads = Runtime.getRuntime().availableProcessors() * 8;
-      // Maintain a useful minimum of core threads even on wimpy hosts
-      if (coreThreads < 32) {
-        coreThreads = 32;
-      }
-      int maxThreads = coreThreads * 8;
-      this.executor = new ThreadPoolExecutor(
-          coreThreads,
-          maxThreads,
-          // Time out threads after 60 seconds of inactivity
-          60, TimeUnit.SECONDS,
-          // Queue up to N tasks per worker threads (N=100 by default)
-          new LinkedBlockingQueue<Runnable>(maxThreads *
-              config.getInt(HConstants.HBASE_CLIENT_MAX_TOTAL_TASKS,
-                  HConstants.DEFAULT_HBASE_CLIENT_MAX_TOTAL_TASKS)),
-          // Create daemon threads
-          new ThreadFactory() {
-              public Thread newThread(Runnable r) {
-                  Thread t = new Thread(r);
-                  t.setDaemon(true);
-                  return t;
-              }
-            });
-      // Allow for the core thread pool to shrink with inactivity
-      this.executor.allowCoreThreadTimeOut(true);
-      // This is YCSB, we should prep for drag racing
-      this.executor.prestartAllCoreThreads();
+    private static volatile ThreadPoolExecutor EXECUTOR = null;
+
+    private static ThreadPoolExecutor getExecutor() {
+        if (EXECUTOR == null) {
+            synchronized (HBaseClient.class) {
+                if (EXECUTOR == null) {
+                    int coreThreads = Runtime.getRuntime().availableProcessors() * 8;
+                    // Maintain a useful minimum of core threads even on wimpy hosts
+                    if (coreThreads < 32) {
+                        coreThreads = 32;
+                    }
+                    int maxThreads = coreThreads * 8;
+                    EXECUTOR = new ThreadPoolExecutor(
+                        coreThreads,
+                        maxThreads,
+                        // Time out threads after 60 seconds of inactivity
+                        60, TimeUnit.SECONDS,
+                        // Queue up to 100 tasks per worker thread
+                        new LinkedBlockingQueue<Runnable>(maxThreads * 100),
+                        // Create daemon threads
+                        new ThreadFactory() {
+                          public Thread newThread(Runnable r) {
+                            Thread t = new Thread(r);
+                            t.setDaemon(true);
+                            return t;
+                          }
+                        });
+                    // Allow for the core thread pool to shrink with inactivity
+                    EXECUTOR.allowCoreThreadTimeOut(true);
+                    // This is YCSB, prepare for drag racing
+                    EXECUTOR.prestartAllCoreThreads();
+                }
+            }
+        }
+        return EXECUTOR;
+    }
+
+    private Configuration config;
+    private HConnection connection;
+    public boolean debug = false;
+    public String columnFamily = "";
+    public byte columnFamilyBytes[];
+
+    public HBaseClient() {
+        super();
     }
 
     /**
@@ -136,6 +140,14 @@ public class HBaseClient extends com.yahoo.ycsb.DB
             throw new DBException("No columnfamily specified");
         }
         columnFamilyBytes = Bytes.toBytes(columnFamily);
+        config = HBaseConfiguration.create();
+        // Disable Nagle on the client, hope we've done the same on the server
+        config.setBoolean("hbase.ipc.client.tcpnodelay", true);
+        try {
+            connection = HConnectionManager.createConnection(config);
+        } catch (IOException e) {
+            throw new DBException(e);
+        }
     }
 
     /**
@@ -156,7 +168,7 @@ public class HBaseClient extends com.yahoo.ycsb.DB
     }
 
     private HTableInterface getHTable(String table) throws IOException {
-        HTableInterface t = connection.getTable(table, executor);
+        HTableInterface t = connection.getTable(table, getExecutor());
         // This is currently a no-op. We will get a new HTI for every DB op
         // requested by core. This is "lightweight" according to HBase docs
         // since we are managing our own connections as is the new preferred
