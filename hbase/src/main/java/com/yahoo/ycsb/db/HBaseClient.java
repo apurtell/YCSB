@@ -215,15 +215,18 @@ public class HBaseClient extends com.yahoo.ycsb.DB
             putHTable(t);
         }
 
-        if (debug) {
-            System.out.println("Completed read for key " + key + ", " + r.listCells().size() +
-                " cells returned");
+        Cell[] cells = r.rawCells();
+        if (cells != null) {
+            for (int i = 0; i < cells.length; i++) {
+                result.put(new String(cells[i].getQualifierArray(), cells[i].getQualifierOffset(),
+                        cells[i].getQualifierLength()),
+                    new ByteArrayByteIterator(cells[i].getValueArray(), cells[i].getValueOffset(),
+                        cells[i].getValueLength()));
+            }
         }
-        for (Cell c : r.listCells()) {
-            result.put(new String(c.getQualifierArray(), c.getQualifierOffset(),
-                    c.getQualifierLength()),
-                new ByteArrayByteIterator(c.getValueArray(), c.getValueOffset(),
-                    c.getValueLength()));
+        if (debug) {
+            System.out.println("Completed read for key " + key + ", " + result.size() +
+                " cells returned");
         }
 
         return result.isEmpty() ? NoMatchingRecord : Ok;
@@ -270,11 +273,14 @@ public class HBaseClient extends com.yahoo.ycsb.DB
                 }
                 // add rowResult to result vector
                 HashMap<String,ByteIterator> rowResult = new HashMap<String, ByteIterator>();
-                for (Cell c : rr.listCells()) {
-                  rowResult.put(new String(c.getQualifierArray(), c.getQualifierOffset(),
-                          c.getQualifierLength()),
-                      new ByteArrayByteIterator(c.getValueArray(), c.getValueOffset(),
-                          c.getValueLength()));
+                Cell[] cells = rr.rawCells();
+                if (cells != null) {
+                    for (int i = 0; i < cells.length; i++) {
+                        rowResult.put(new String(cells[i].getQualifierArray(),
+                                cells[i].getQualifierOffset(), cells[i].getQualifierLength()),
+                            new ByteArrayByteIterator(cells[i].getValueArray(),
+                                cells[i].getValueOffset(), cells[i].getValueLength()));
+                    }
                 }
                 result.add(rowResult);
                 numResults++;
