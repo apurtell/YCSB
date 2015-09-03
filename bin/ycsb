@@ -44,31 +44,8 @@ COMMANDS = {
 }
 
 DATABASES = {
-    "accumulo"     : "com.yahoo.ycsb.db.AccumuloClient",
-    "aerospike"    : "com.yahoo.ycsb.db.AerospikeClient",
     "basic"        : "com.yahoo.ycsb.BasicDB",
-    "cassandra-7"  : "com.yahoo.ycsb.db.CassandraClient7",
-    "cassandra-8"  : "com.yahoo.ycsb.db.CassandraClient8",
-    "cassandra-10" : "com.yahoo.ycsb.db.CassandraClient10",
-    "cassandra-cql": "com.yahoo.ycsb.db.CassandraCQLClient",
-    "couchbase"    : "com.yahoo.ycsb.db.CouchbaseClient",
-    "dynamodb"     : "com.yahoo.ycsb.db.DynamoDBClient",
-    "elasticsearch": "com.yahoo.ycsb.db.ElasticSearchClient",
-    "gemfire"      : "com.yahoo.ycsb.db.GemFireClient",
-    "hbase"        : "com.yahoo.ycsb.db.HBaseClient",
-    "hbase-10"     : "com.yahoo.ycsb.db.HBaseClient10",
-    "hypertable"   : "com.yahoo.ycsb.db.HypertableClient",
-    "infinispan-cs": "com.yahoo.ycsb.db.InfinispanRemoteClient",
-    "infinispan"   : "com.yahoo.ycsb.db.InfinispanClient",
-    "jdbc"         : "com.yahoo.ycsb.db.JdbcDBClient",
-    "mapkeeper"    : "com.yahoo.ycsb.db.MapKeeperClient",
-    "mongodb"      : "com.yahoo.ycsb.db.MongoDbClient",
-    "mongodb-async": "com.yahoo.ycsb.db.AsyncMongoDbClient",
-    "nosqldb"      : "com.yahoo.ycsb.db.NoSqlDbClient",
-    "orientdb"     : "com.yahoo.ycsb.db.OrientDBClient",
-    "redis"        : "com.yahoo.ycsb.db.RedisClient",
-    "tarantool"    : "com.yahoo.ycsb.db.TarantoolClient",
-    "voldemort"    : "com.yahoo.ycsb.db.VoldemortClient"
+    "hbase"        : "com.yahoo.ycsb.db.HBaseClient"
 }
 
 OPTIONS = {
