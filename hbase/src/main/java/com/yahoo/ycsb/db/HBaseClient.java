@@ -37,8 +37,10 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.ClusterStatus;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.client.Get;
@@ -64,7 +66,11 @@ public class HBaseClient extends com.yahoo.ycsb.DB
 
     private static volatile ThreadPoolExecutor EXECUTOR = null;
 
-    private static ThreadPoolExecutor getExecutor() {
+    private static ThreadPoolExecutor getExecutor(Configuration conf, int dbThreads)
+            throws DBException {
+        // This will only create an executor once, but the number of servers in
+        // the cluster should be roughly the same for all DB instances, modulo
+        // a bit of churn, so this is fine.
         if (EXECUTOR == null) {
             synchronized (HBaseClient.class) {
                 if (EXECUTOR == null) {
@@ -73,7 +79,24 @@ public class HBaseClient extends com.yahoo.ycsb.DB
                     if (coreThreads < 32) {
                         coreThreads = 32;
                     }
-                    int maxThreads = coreThreads * 8;
+                    // Size the pool proportionally to the size of the cluster
+                    // under test and the number of DB threads for the test.
+                    int maxThreads = dbThreads;
+                    try {
+                        HBaseAdmin admin = new HBaseAdmin(conf);
+                        try {
+                          ClusterStatus status = admin.getClusterStatus();
+                          maxThreads *= status.getServersSize();
+                        } finally {
+                            admin.close();
+                        }
+                    } catch (IOException e) {
+                        throw new DBException(e);
+                    }
+                    // Ensure thread pool parameter sanity
+                    if (maxThreads < coreThreads) {
+                        maxThreads = coreThreads;
+                    }
                     EXECUTOR = new ThreadPoolExecutor(
                         coreThreads,
                         maxThreads,
@@ -101,6 +124,7 @@ public class HBaseClient extends com.yahoo.ycsb.DB
 
     private Configuration config;
     private HConnection connection;
+    private ThreadPoolExecutor executor;
     public boolean debug = false;
     public String columnFamily = "";
     public byte columnFamilyBytes[];
@@ -140,9 +164,22 @@ public class HBaseClient extends com.yahoo.ycsb.DB
             throw new DBException("No columnfamily specified");
         }
         columnFamilyBytes = Bytes.toBytes(columnFamily);
+
+        // Get the number of DB threads for this run
+        int dbThreads = 1;
+        String threadCount = getProperties().getProperty("threadcount");
+        if (threadCount != null) {
+            dbThreads = Integer.valueOf(threadCount);
+        }
+
         config = HBaseConfiguration.create();
         // Disable Nagle on the client, hope we've done the same on the server
         config.setBoolean("hbase.ipc.client.tcpnodelay", true);
+
+        // This will only create an executor once, but initialization factors
+        // will be constant for all DB threads, so that's fine.
+        executor = getExecutor(config, dbThreads);
+
         try {
             connection = HConnectionManager.createConnection(config);
         } catch (IOException e) {
@@ -168,7 +205,7 @@ public class HBaseClient extends com.yahoo.ycsb.DB
     }
 
     private HTableInterface getHTable(String table) throws IOException {
-        HTableInterface t = connection.getTable(table, getExecutor());
+        HTableInterface t = connection.getTable(table, executor);
         // This is currently a no-op. We will get a new HTI for every DB op
         // requested by core. This is "lightweight" according to HBase docs
         // since we are managing our own connections as is the new preferred
