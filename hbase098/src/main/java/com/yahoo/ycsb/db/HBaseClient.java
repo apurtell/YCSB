@@ -139,20 +139,6 @@ public class HBaseClient extends com.yahoo.ycsb.DB
             debug = true;
         }
 
-        // Terminate right now if table does not exist, since the client
-        // will not propagate this error upstream once the workload
-        // starts.
-        String table = com.yahoo.ycsb.workloads.CoreWorkload.table;
-        try {
-            HTable ht = new HTable(config, table);
-            try {
-                HTableDescriptor dsc = ht.getTableDescriptor();
-            } finally {
-                ht.close();
-            }
-        } catch (IOException e) {
-            throw new DBException(e);
-        }
         if ("false".equals(getProperties().getProperty("hbase.usepagefilter", "true"))) {
           _usePageFilter = false;
         }
@@ -174,6 +160,21 @@ public class HBaseClient extends com.yahoo.ycsb.DB
         config = HBaseConfiguration.create();
         // Disable Nagle on the client, hope we've done the same on the server
         config.setBoolean("hbase.ipc.client.tcpnodelay", true);
+
+        // Terminate right now if table does not exist, since the client
+        // will not propagate this error upstream once the workload
+        // starts.
+        String table = com.yahoo.ycsb.workloads.CoreWorkload.table;
+        try {
+            HTable ht = new HTable(config, table);
+            try {
+                HTableDescriptor dsc = ht.getTableDescriptor();
+            } finally {
+                ht.close();
+            }
+        } catch (IOException e) {
+            throw new DBException(e);
+        }
 
         // This will only create an executor once, but initialization factors
         // will be constant for all DB threads, so that's fine.
